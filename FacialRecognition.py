@@ -2,7 +2,30 @@ import cv2 as cv
 import threading
 import face_recognition
 import subprocess
+from twilio.rest import Client
 import numpy as np
+
+# Twilio credentials
+account_sid = 'your_account_sid'
+auth_token = 'your_auth_token'
+twilio_phone_number = 'your_twilio_phone_number'
+# The phone number you want to send the message to
+recipient_phone_number = 'your phone number'
+
+client = Client(account_sid, auth_token)
+
+
+def send_sms(message):
+    try:
+        message = client.messages.create(
+            body=message,
+            from_=twilio_phone_number,
+            to=recipient_phone_number
+        )
+        print(f"Message sent successfully. SID: {message.sid}")
+    except Exception as e:
+        print(f"Error sending message: {str(e)}")
+
 
 cap = cv.VideoCapture(0)
 cap.set(cv.CAP_PROP_FRAME_WIDTH, 640)
@@ -33,10 +56,13 @@ for name, image_path in reference_images.items():
     reference_encodings[name] = encoding
 
 # Haar cascade for face detection
-face_cascade = cv.CascadeClassifier(cv.data.haarcascades + 'haarcascade_frontalface_default.xml')
+face_cascade = cv.CascadeClassifier(
+    cv.data.haarcascades + 'haarcascade_frontalface_default.xml')
 
-def send_imessage(phone_number, message):
-    subprocess.run(['osascript', '-e', f'tell application "Messages" to send "{message}" to buddy "{phone_number}"'])
+
+def send_notifications(message):
+    send_sms(message)
+
 
 while True:
     ret, frame = cap.read()
@@ -44,17 +70,22 @@ while True:
     if ret:
         if counter % 30 == 0:  # Execute every 30 frames
             gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
-            faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
-            
+            faces = face_cascade.detectMultiScale(
+                gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+
             if len(faces) > 0:
                 (x, y, w, h) = faces[0]
-                face_image = frame[y:y+h, x:x+w]  # Extract the detected face region
-                face_image = cv.cvtColor(face_image, cv.COLOR_BGR2RGB)  # Convert to RGB format
+                # Extract the detected face region
+                face_image = frame[y:y+h, x:x+w]
+                # Convert to RGB format
+                face_image = cv.cvtColor(face_image, cv.COLOR_BGR2RGB)
                 frame_encoding = face_recognition.face_encodings(face_image)
-                
+
                 if len(frame_encoding) > 0:
-                    matches = face_recognition.compare_faces(list(reference_encodings.values()), frame_encoding[0], tolerance=0.5)
-                    face_matches = {name: match for name, match in zip(reference_encodings.keys(), matches)}
+                    matches = face_recognition.compare_faces(
+                        list(reference_encodings.values()), frame_encoding[0], tolerance=0.5)
+                    face_matches = {name: match for name, match in zip(
+                        reference_encodings.keys(), matches)}
                 else:
                     face_matches = {}
             else:
@@ -67,18 +98,21 @@ while True:
             unknown_person_detected = False  # Flag to track if an unknown person is detected
 
             for (x, y, w, h) in faces:
-                cv.rectangle(frame, (x, y), (x+w, y+h), (255, 0, 0), 2)  # Draw rectangle around the detected face
-            
+                # Draw rectangle around the detected face
+                cv.rectangle(frame, (x, y), (x+w, y+h), (255, 0, 0), 2)
+
             for name, match in face_matches.items():
                 if match:
-                    cv.putText(frame, 'MATCH', (100, 100), cv.FONT_HERSHEY_SIMPLEX, 2, (0, 255, 0), 3)
+                    cv.putText(frame, 'MATCH', (100, 100),
+                               cv.FONT_HERSHEY_SIMPLEX, 2, (0, 255, 0), 3)
                     match_found = True
                     break
 
             if not match_found:
-                cv.putText(frame, 'NO MATCH: Unknown Person', (20, 450), cv.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 255), 3)
+                cv.putText(frame, 'NO MATCH: Unknown Person', (20, 450),
+                           cv.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 255), 3)
                 if not unknown_person_detected and not notification_sent:
-                    send_imessage('+12488250990', 'Unknown person detected!')
+                    send_notifications('Unknown person detected!')
                     notification_sent = True
                     unknown_person_detected = True
 
@@ -89,20 +123,3 @@ while True:
             break
 
 cv.destroyAllWindows()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
